@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lidya/presentation/screens/chart_screen.dart';
 
 // Todo Model
 class Todo {
@@ -286,7 +287,7 @@ class DetailScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-
+                ChartScreen()
             ],
           ),
         ),
