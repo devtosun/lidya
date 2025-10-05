@@ -1,0 +1,325 @@
+// Presentation katmanında kullanım
+final chartRepository = ref.read(chartRepositoryProvider);
+
+// Tarihsel veri çekme
+final candles = await chartRepository.getHistoricalData(
+  symbol: 'BTCUSDT',
+  interval: Duration(hours: 1),
+  limit: 1000,
+);
+
+// Canlı veri dinleme
+chartRepository.subscribeToLiveData('BTCUSDT').listen((candle) {
+  print('New candle: ${candle.close}');
+});
+
+// Çizim kaydetme
+await chartRepository.saveDrawing(
+  'BTCUSDT',
+  Drawing(
+    id: 'drawing-1',
+    type: DrawingType.trendline,
+    points: [/* ... */],
+    color: '#FF0000',
+  ),
+);
+
+
+
+Önemli Notlar
+
+Hata Yönetimi: Tüm network operasyonları try-catch bloklarıyla sarılmış ve özel exception'lar fırlatılıyor
+Cache Stratejisi: Üç katmanlı cache yapısı:
+
+Memory cache (en hızlı)
+Local storage (Hive)
+Remote API (en yavaş)
+
+
+WebSocket Yönetimi: Otomatik reconnect, ping-pong mekanizması ve error handling
+Riverpod Integration: Tüm servisler provider'lar aracılığıyla yönetiliyor ve dispose işlemleri otomatik
+Test Edilebilirlik: Her servis interface üzerinden inject edilebilir, mock'lanabilir
+Performance: Lazy loading, sayfalama desteği ve bellek optimizasyonu
+
+
+
+
+
+9. Önemli Notlar
+
+Fake Data Service:
+
+Development için gerçekçi candle verileri üretir
+Trend simülasyonu yapabilir
+Stream ile animasyonlu veri yüklemesi destekler
+Production'da useFakeData = false yaparak gerçek API'ye geçiş yapılır
+
+
+Hata Yönetimi:
+
+Tüm network operasyonları try-catch bloklarıyla sarılmış
+Özel exception'lar fırlatılıyor (ApiException, RepositoryException)
+
+
+Cache Stratejisi:
+
+Sadece memory cache kullanılıyor (lightweight)
+Local storage kaldırıldı (gereksiz complexity)
+Drawings in-memory tutuluyorbasit ve hızlı
+
+
+WebSocket Yönetimi:
+
+Otomatik reconnect mekanizması
+Ping-pong heartbeat
+Error handling ve cleanup
+
+
+Riverpod Integration:
+
+Tüm servisler provider'larla yönetiliyor
+Otomatik dispose işlemleri
+Environment-based configuration (dev/prod)
+
+
+Test Edilebilirlik:
+
+Her servis interface üzerinden inject edilebilir
+Fake service ile kolayca test yapılabilir
+Mock'lanabilir yapı
+
+
+Performance:
+
+Stream-based lazy loading
+Memory-efficient cache
+Minimal dependencies
+
+
+
+
+// main.dart
+void main() {
+  runApp(
+    ProviderScope(
+      overrides: [
+        // Development modunda fake data kullan
+        useFakeDataProvider.overrideWithValue(
+          kDebugMode ? true : false,
+        ),
+        
+        // Production modunda gerçek API URL'leri
+        if (!kDebugMode) ...[
+          apiBaseUrlProvider.overrideWithValue('https://api.real-service.com'),
+          wsUrlProvider.overrideWithValue('wss://ws.real-service.com'),
+        ],
+      ],
+      child: MyApp(),
+    ),
+  );
+}
+
+
+
+
+
+
+
+Basit Kullanım
+dart// Presentation katmanında fake data kullanımı
+class ChartScreen extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chartRepository = ref.read(chartRepositoryProvider);
+
+    return FutureBuilder<List<Candle>>(
+      future: chartRepository.getHistoricalData(
+        symbol: 'BTCUSDT',
+        interval: Duration(hours: 1),
+        limit: 1000,
+      ),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return ChartWidget(candles: snapshot.data!);
+        }
+        return CircularProgressIndicator();
+      },
+    );
+  }
+}
+
+
+
+Stream ile Tane Tane Veri Yükleme
+dart// Candle'ları tek tek yükleyerek animasyonlu grafik
+class AnimatedChartLoader extends ConsumerStatefulWidget {
+  @override
+  _AnimatedChartLoaderState createState() => _AnimatedChartLoaderState();
+}
+
+class _AnimatedChartLoaderState extends ConsumerState<AnimatedChartLoader> {
+  final List<Candle> _candles = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCandlesWithAnimation();
+  }
+
+  Future<void> _loadCandlesWithAnimation() async {
+    final fakeService = ref.read(fakeChartApiServiceProvider);
+    
+    await for (final candleDto in fakeService.generateCandlesStream(
+      symbol: 'BTCUSDT',
+      interval: Duration(hours: 1),
+      count: 500,
+      delay: Duration(milliseconds: 20), // Her 20ms'de bir candle
+    )) {
+      setState(() {
+        _candles.add(candleDto.toDomain());
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChartWidget(candles: _candles);
+  }
+}
+Gerçekçi Trend ile Veri Üretme
+dart// Trend içeren gerçekçi veri
+class RealisticChartExample extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final params = CandleStreamParams(
+      symbol: 'ETHUSDT',
+      interval: Duration(minutes: 15),
+      count: 1000,
+      delay: Duration(milliseconds: 10),
+      trendStrength: 0.7, // Güçlü trend
+    );
+
+    final candleStream = ref.watch(candleStreamProvider(params));
+
+    return candleStream.when(
+      data: (candles) => ChartWidget(candles: candles),
+      loading: () => CircularProgressIndicator(),
+      error: (err, stack) => Text('Error: $err'),
+    );
+  }
+}
+Canlı Veri Dinleme (WebSocket)
+dart// WebSocket üzerinden canlı fiyat güncellemeleri
+class LiveChartWidget extends ConsumerStatefulWidget {
+  @override
+  _LiveChartWidgetState createState() => _LiveChartWidgetState();
+}
+
+class _LiveChartWidgetState extends ConsumerState<LiveChartWidget> {
+  List<Candle> _candles = [];
+  StreamSubscription<Candle>? _subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    final repository = ref.read(chartRepositoryProvider);
+    
+    // İlk verileri yükle
+    final historicalData = await repository.getHistoricalData(
+      symbol: 'BTCUSDT',
+      interval: Duration(hours: 1),
+      limit: 1000,
+    );
+    
+    setState(() {
+      _candles = historicalData;
+    });
+
+    // Canlı veri akışını başlat
+    _subscription = repository.subscribeToLiveData('BTCUSDT').listen(
+      (newCandle) {
+        setState(() {
+          // Son candle'ı güncelle veya yeni ekle
+          if (_candles.isNotEmpty && 
+              _candles.last.timestamp == newCandle.timestamp) {
+            _candles[_candles.length - 1] = newCandle;
+          } else {
+            _candles.add(newCandle);
+          }
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChartWidget(candles: _candles);
+  }
+}
+Çizim Kaydetme ve Yükleme
+dart// Kullanıcı çizimlerini yönetme
+class ChartWithDrawings extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repository = ref.read(chartRepositoryProvider);
+    
+    return FutureBuilder<List<Drawing>>(
+      future: repository.getDrawings('BTCUSDT'),
+      builder: (context, snapshot) {
+        final drawings = snapshot.data ?? [];
+        
+        return ChartWidget(
+          candles: _candles,
+          drawings: drawings,
+          onDrawingAdded: (drawing) async {
+            await repository.saveDrawing('BTCUSDT', drawing);
+          },
+          onDrawingDeleted: (drawingId) async {
+            await repository.deleteDrawing('BTCUSDT', drawingId);
+          },
+        );
+      },
+    );
+  }
+}
+
+
+
+// Hızlı test için - Anında yükleme
+final candles = await fakeService.fetchLatestCandles(
+  symbol: 'BTCUSDT',
+  interval: Duration(hours: 1),
+  count: 1000,
+);
+
+// Animasyonlu yükleme - Her 20ms'de bir candle
+await for (final candle in fakeService.generateCandlesStream(
+  symbol: 'BTCUSDT',
+  interval: Duration(hours: 1),
+  count: 500,
+  delay: Duration(milliseconds: 20),
+)) {
+  // UI güncelle
+}
+
+// Gerçekçi trend ile
+await for (final candle in fakeService.generateRealisticCandlesStream(
+  symbol: 'ETHUSDT',
+  interval: Duration(minutes: 15),
+  count: 1000,
+  trendStrength: 0.7, // %70 trend, %30 rastgele
+)) {
+  // UI güncelle
+}
+
+
